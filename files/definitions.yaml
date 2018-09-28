@@ -1,0 +1,46 @@
+cluster:
+  description: >
+    This describes an Elasticsearch cluster to be deployed into your environment.
+  type: object
+  additionalProperties: false
+  required: [diskSize]
+  properties:
+    master:
+      description: >
+        Optional configuration for dedicated master nodes in the ES cluster.  Adding one or more of these provides your cluster better performance and stability.
+      type: object
+      additionalProperties: false
+      properties:
+        count:
+          description: The number of master nodes within your cluster.
+          type: integer
+          minimum: 1
+        type:
+          description: The name of the EC2 instance class to use.
+          type: string
+    nodes:
+      description: >
+        Optional configuration for the data nodes in the ES cluster.
+      type: object
+      additionalProperties: false
+      properties:
+        count:
+          description: The number of master nodes within your cluster.
+          type: integer
+          minimum: 1
+        type:
+          description: The name of the EC2 instance class to use.
+          type: string
+        highAvailability:
+          description: This asks the cluster to have zone awareness, distributing its fragments and instances across two availability zones in your VPC.
+          type: boolean
+
+    diskSize:
+      description: >
+        Specifies the disk size of each instances EBS volume in the cluster, given in GB.
+      type: integer
+
+    snapshot:
+      description: >
+        Optional flag to asking the cluster to produce a snapshot each day at 0 hours UTC.
+      type: boolean

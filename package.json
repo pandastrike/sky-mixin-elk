@@ -1,0 +1,59 @@
+{
+  "name": "sky-mixin-log",
+  "version": "0.0.1",
+  "description": "Panda Sky Mixin for Allocating an Elasticsearch Cluster and Log Streaming Analysis",
+  "main": "build/npm/src/index.js",
+  "files": [
+    "build/npm",
+    "files",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "gulp npm:test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pandastrike/sky-mixin-elasticsearch.git"
+  },
+  "keywords": [
+    "panda",
+    "sky",
+    "serverless",
+    "vpc",
+    "elasticsearch",
+    "logging",
+    "kibana",
+    "elk"
+  ],
+  "contributors": [
+    {
+      "name": "Dan Yoder",
+      "email": "dan@pandastrike.com"
+    },
+    {
+      "name": "David Harper",
+      "email": "david@pandastrike.com"
+    }
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/pandastrike/sky-mixin-elasticsearch/issues"
+  },
+  "homepage": "https://github.com/pandastrike/sky-mixin-elasticsearch#readme",
+  "devDependencies": {
+    "@babel/preset-env": "^7.1.0",
+    "amen": "^2.1.0",
+    "babel-core": "^6.26.3",
+    "coffeescript": "^2.3.2",
+    "gulp": "github:gulpjs/gulp#4.0",
+    "panda-builder": "2.3.3"
+  },
+  "dependencies": {
+    "js-yaml": "^3.10.0",
+    "panda-parchment": "^4.0.4",
+    "panda-quill": "^3.1.1",
+    "panda-serialize": "^0.2.0",
+    "panda-sky-mixin": "0.0.4",
+    "sundog": "file:../sundog"
+  }
+}

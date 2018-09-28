@@ -1,0 +1,201 @@
+{{#with cluster}}
+ESCluster:
+  Type: AWS::Elasticsearch::Domain
+  Properties:
+    AccessPolicies:
+      Version: "2012-10-17"
+      Statement:
+          - Effect: Allow
+            Principal:
+              AWS: "*"
+            Action: "es:*"
+            Resource: "arn:aws:es:us-east-1:{{@root.accountID}}:domain/{{domain}}/*"
+    DomainName: {{domain}}-log
+    ElasticsearchVersion: "6.3"
+    EBSOptions:
+      EBSEnabled: true
+      VolumeType: gp2
+      {{#if diskSize}}
+      VolumeSize: {{diskSize}}
+      {{/if}}
+    {{#if cluster}}
+    ElasticsearchClusterConfig:
+      {{#with master}}
+      DedicatedMasterCount: {{count}}
+      DedicatedMasterEnabled: true
+      DedicatedMasterType: {{type}}
+      {{/with}}
+      {{#with nodes}}
+      InstanceCount: {{count}}
+      InstanceType: {{type}}
+      ZoneAwarenessEnabled: {{highAvailability}}
+      {{/with}}
+    {{/if}}
+    {{#if snapshot}}
+    SnapshotOptions:
+      AutomatedSnapshotStartHour: 0
+    {{/if}}
+    Tags:
+      {{#each @root.tags}}
+      - Key: {{Key}}
+        Value: {{Value}}
+      {{/each}}
+    VPCOptions:
+      SecurityGroupIds:
+        "Fn::Split": [ ",", {Ref: SecurityGroups} ]
+      SubnetIds:
+        {{#each subnets}}
+        - {{.}}
+        {{/each}}
+{{/with}}
+
+{{#with stream}}
+{{#if newBucket}}
+FirehoseBackupBucket:
+  Type: "AWS::S3::Bucket"
+  DeletionPolicy: Retain
+  Properties:
+    BucketName: {{bucket}}
+{{/if}}
+
+FirehoseRole:
+  DependsOn:
+    - ESCluster
+  Type: "AWS::IAM::Role"
+  Properties:
+    AssumeRolePolicyDocument:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: "Allow"
+          Principal:
+            Service:
+              - firehose.amazonaws.com
+          Action:
+            - "sts:AssumeRole"
+    Policies:
+      - PolicyName: {{name}}-role
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action: [
+                "s3:AbortMultipartUpload",
+                "s3:GetBucketLocation",
+                "s3:GetObject",
+                "s3:ListBucket",
+                "s3:ListBucketMultipartUploads",
+                "s3:PutObject"
+              ]
+              Resource: [
+                "arn:aws:s3:::{{bucket}}",
+                "arn:aws:s3:::{{bucket}}/*"
+              ]
+            - Effect: Allow
+              Action: [
+                "es:DescribeElasticsearchDomain",
+                "es:DescribeElasticsearchDomains",
+                "es:DescribeElasticsearchDomainConfig",
+                "es:ESHttpPost",
+                "es:ESHttpPut"
+              ]
+              Resource: [
+                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}",
+                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/*"
+              ]
+            - Effect: Allow
+              Action: [
+                "es:ESHttpGet"
+              ]
+              Resource: [
+                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/_all/_settings",
+                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/_cluster/stats",
+                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/index-name*/_mapping/type-name",
+                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/_nodes",
+                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/_nodes/stats",
+                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/_nodes/*/stats",
+                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/_stats",
+                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/index-name*/_stats"
+              ]
+
+
+Firehose:
+  DependsOn:
+    - ESCluster
+    - FirehoseRole
+  Type: AWS::KinesisFirehose::DeliveryStream
+  Properties:
+    DeliveryStreamName: {{name}}
+    DeliveryStreamType: DirectPut
+    ElasticsearchDestinationConfiguration:
+      # TODO: These are the defaults from the reference docs.  Is this something that should be part of the mixin configuration interface?
+      BufferingHints:
+        IntervalInSeconds: 300
+        SizeInMBs: 5
+      CloudWatchLoggingOptions:
+        Enabled: false
+      DomainARN:
+        "Fn::GetAtt": [ESCluster, DomainArn]
+      IndexName: logs
+      IndexRotationPeriod: OneWeek
+      RetryOptions:
+        DurationInSeconds: 7200
+      RoleARN:
+        "Fn::GetAtt": [FirehoseRole, Arn]
+      S3BackupMode: FailedDocumentsOnly
+      S3Configuration:
+        BucketARN: "arn:aws:s3:::{{bucket}}"
+        BufferingHints:
+          IntervalInSeconds: 300
+          SizeInMBs: 5
+        CloudWatchLoggingOptions:
+          Enabled: false
+        CompressionFormat: ZIP
+        EncryptionConfiguration:
+          NoEncryptionConfig: NoEncryption
+        RoleARN:
+          "Fn::GetAtt": [FirehoseRole, Arn]
+      TypeName: logs
+
+LogRole:
+  DependsOn:
+    - Firehose
+  Type: "AWS::IAM::Role"
+  Properties:
+    AssumeRolePolicyDocument:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: "Allow"
+          Principal:
+            Service:
+              - "logs.{{@root.region}}.amazonaws.com"
+          Action:
+            - "sts:AssumeRole"
+    Policies:
+      - PolicyName: {{name}}-log-role
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action: ["firehose:*"]
+              Resource: ["arn:aws:firehose:{{@root.region}}:{{@root.accountID}}:*"]
+            - Effect: Allow
+              Action: ["iam:PassRole"]
+              Resource: ["arn:aws:iam::{{@root.accountID}}:role/{{name}}-log-role"]
+
+{{/with}}
+
+
+{{#each logs}}
+SubscriptonFilter{{templateName}}:
+  DependsOn:
+    - FirehoseRole
+    - Firehose
+  Type: AWS::Logs::SubscriptionFilter
+  Properties:
+    DestinationArn:
+      "Fn::GetAtt": [Firehose, Arn]
+    FilterPattern: "?START ?END ?REPORT ?DEBUG ?INFO ?WARN ?ERROR"
+    LogGroupName: {{name}}
+    RoleArn:
+      "Fn::GetAtt": [LogRole, Arn]
+{{/each}}

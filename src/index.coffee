@@ -16,7 +16,7 @@ mixin = do ->
   template = await read getFilePath "template.yaml"
 
   new MIXIN {
-    name: "log"
+    name: "elk"
     schema
     template
     preprocess

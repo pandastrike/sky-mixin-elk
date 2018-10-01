@@ -1,5 +1,5 @@
 {
-  "name": "sky-mixin-log",
+  "name": "sky-mixin-elk",
   "version": "0.0.1",
   "description": "Panda Sky Mixin for Allocating an Elasticsearch Cluster and Log Streaming Analysis",
   "main": "build/npm/src/index.js",

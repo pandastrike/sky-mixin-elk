@@ -9,7 +9,7 @@ process = (SDK, config) ->
 
   # Start by extracting out the KMS Mixin configuration:
   {env, tags=[]} = config
-  c = config.aws.environments[env].mixins.log
+  c = config.aws.environments[env].mixins.elk
   c = if isObject c then c else {}
   c.tags = cat (c.tags || []), tags
   c.tags.push {Key: "subtask", Value: "logging"}
@@ -20,7 +20,7 @@ process = (SDK, config) ->
 
   # Elasticsearch cluster configuration... by default only use one subnet.
   cluster =
-    domain: config.environmentVariables.fullName
+    domain: config.environmentVariables.fullName + "-logs"
     subnets: ['"Fn::Select": [ 0, "Fn::Split": [ ",", {Ref: Subnets} ]]']
   if c.cluster.nodes?.highAvailability
     cluster.subnets.push '"Fn::Select": [1, "Fn::Split": [ ",", {Ref: Subnets} ]]'

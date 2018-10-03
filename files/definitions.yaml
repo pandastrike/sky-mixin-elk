@@ -10,6 +10,7 @@ cluster:
         Optional configuration for dedicated master nodes in the ES cluster.  Adding one or more of these provides your cluster better performance and stability.
       type: object
       additionalProperties: false
+      required: [count, type]
       properties:
         count:
           description: The number of master nodes within your cluster.
@@ -23,6 +24,7 @@ cluster:
         Optional configuration for the data nodes in the ES cluster.
       type: object
       additionalProperties: false
+      required: [count, type]
       properties:
         count:
           description: The number of master nodes within your cluster.

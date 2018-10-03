@@ -10,7 +10,7 @@ ESCluster:
       {{#if diskSize}}
       VolumeSize: {{diskSize}}
       {{/if}}
-    {{#if cluster}}
+    {{#if @root.cluster}}
     ElasticsearchClusterConfig:
       {{#with master}}
       DedicatedMasterCount: {{count}}
@@ -106,8 +106,21 @@ FirehoseRole:
           Version: "2012-10-17"
           Statement:
             - Effect: Allow
-              Action: ["lambda:InvokeFunction"]
+              Action: [
+                "lambda:InvokeFunction",
+                "lambda:GetFunctionConfiguration"
+              ]
               Resource: [{{lambda.arn}}]
+            - Effect: "Allow"
+              Action: [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ]
+              Resource: [
+                "arn:aws:logs:*:*:log-group:/aws/firehose/{{name}}",
+                "arn:aws:logs:*:*:log-group:/aws/firehose/{{name}}:*"
+              ]
             - Effect: Allow
               Action: [
                 "s3:AbortMultipartUpload",
@@ -148,12 +161,35 @@ FirehoseRole:
                 "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/index-name*/_stats"
               ]
 
+FirehoseErrorLogs:
+  Type: AWS::Logs::LogGroup
+  Properties:
+    LogGroupName: "/aws/firehose/{{name}}"
+    RetentionInDays: 30
+
+FirehoseElasticsearchStream:
+  DependsOn:
+    - FirehoseErrorLogs
+  Type: AWS::Logs::LogStream
+  Properties:
+    LogGroupName: "/aws/firehose/{{name}}"
+    LogStreamName: elasticsearchDelivery
+
+FirehoseS3Stream:
+  DependsOn:
+    - FirehoseErrorLogs
+  Type: AWS::Logs::LogStream
+  Properties:
+    LogGroupName: "/aws/firehose/{{name}}"
+    LogStreamName: s3backup
 
 Firehose:
   DependsOn:
     - ESCluster
     - FirehoseRole
     - FirehoseLambda
+    - FirehoseElasticsearchStream
+    - FirehoseS3Stream
   Type: AWS::KinesisFirehose::DeliveryStream
   Properties:
     DeliveryStreamName: {{name}}
@@ -164,7 +200,9 @@ Firehose:
         IntervalInSeconds: 300
         SizeInMBs: 5
       CloudWatchLoggingOptions:
-        Enabled: false
+        Enabled: true
+        LogGroupName: "/aws/firehose/{{name}}"
+        LogStreamName: elasticsearchDelivery
       DomainARN:
         "Fn::GetAtt": [ESCluster, DomainArn]
       IndexName: logs
@@ -188,7 +226,9 @@ Firehose:
           IntervalInSeconds: 300
           SizeInMBs: 5
         CloudWatchLoggingOptions:
-          Enabled: false
+          Enabled: true
+          LogGroupName: "/aws/firehose/{{name}}"
+          LogStreamName: s3backup
         CompressionFormat: ZIP
         EncryptionConfiguration:
           NoEncryptionConfig: NoEncryption

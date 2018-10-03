@@ -26,6 +26,13 @@ process = (SDK, config) ->
   if c.cluster.nodes?.highAvailability
     cluster.subnets.push '"Fn::Select": [1, "Fn::Split": [ ",", {Ref: Subnets} ]]'
   cluster = merge cluster, c.cluster
+  if !cluster.nodes
+    cluster.nodes =
+      count: 1
+      type: "t2.small.elasticsearch"
+      highAvailability: false
+  if !cluster.nodes.highAvailability
+    cluster.nodes.highAvailability = false
 
   # Kinesis firehose configuration
   stream = {
@@ -36,7 +43,7 @@ process = (SDK, config) ->
       key: "mixin-code/elk/package.zip"
       name: "#{config.environmentVariables.fullName}-elk-firehose-transform"
   }
-  
+
   stream.lambda.arn = "arn:aws:lambda:#{config.aws.region}:#{config.accountID}:function:#{stream.lambda.name}"
 
   # Check if we need to make a bucket for the stream's failure dumps.

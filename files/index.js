@@ -71,14 +71,16 @@ function parseRecord(handler, record){
       RequestId: RegExp("^REPORT RequestId\: (.*?)\t").exec(message)[1],
       Duration: RegExp("\tDuration: (.*?) ms\t").exec(message)[1],
       Memory: RegExp("\tMax Memory Used: (.*?) MB\t").exec(message)[1],
+      #Timestamp: record.timestamp,
       Message: message
-    }
+    };
   } else {
     return {
       Handler: handler,
       RequestId: RegExp("^(.*?)\t(.*?)\t").exec(message)[2],
+      Timestamp: record.timestamp,
       Message: message
-    }
+    };
   }
 }
 
@@ -233,7 +235,7 @@ exports.handler = (event, context, callback) => {
 
         let projectedSize = recs.filter(rec => rec.result === 'Ok')
                               .map(r => r.recordId.length + r.data.length)
-                              .reduce((a, b) => a + b);
+                              .reduce((a, b) => a + b, 0);
         // 6000000 instead of 6291456 to leave ample headroom for the stuff we didn't account for
         for (let idx = 0; idx < event.records.length && projectedSize > 6000000; idx++) {
             const rec = result.records[idx];

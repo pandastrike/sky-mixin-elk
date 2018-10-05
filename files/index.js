@@ -63,33 +63,69 @@ const AWS = require('aws-sdk');
  * The result must be returned in a Promise.
  */
 
-function parseRecord(handler, record){
-  let message = record.message;
-  if (RegExp("^REPORT").test(message)) {
-    return {
-      Handler: handler,
-      RequestId: RegExp("^REPORT RequestId\: (.*?)\t").exec(message)[1],
-      Duration: RegExp("\tDuration: (.*?) ms\t").exec(message)[1],
-      Memory: RegExp("\tMax Memory Used: (.*?) MB\t").exec(message)[1],
-      #Timestamp: record.timestamp,
-      Message: message
-    };
-  } else {
-    return {
-      Handler: handler,
-      RequestId: RegExp("^(.*?)\t(.*?)\t").exec(message)[2],
-      Timestamp: record.timestamp,
-      Message: message
-    };
-  }
+function safeAdd(record, name, value) {
+    if (record[name]) {
+        if (record[name] != value) {
+            console.log(record, name, value);
+            throw new Error("More than one API request thread found in Kinesis record - unable to send to ES.");
+        }
+    } else {
+        record[name] = value;
+    }
+    return record;
 }
 
-function transformLogEvent(logGroup){
-  let handler = logGroup.slice(12);
-  return function (logEvent) {
-    let out = parseRecord(handler, logEvent);
-    return Promise.resolve(JSON.stringify(out) + "\n");
-  };
+function parseReport(record, message) {
+    return {
+        Handler: record.handler,
+        RequestId: RegExp("^REPORT RequestId\: (.*?)\t").exec(message)[1],
+        Duration: RegExp("\tDuration: (.*?) ms\t").exec(message)[1],
+        Memory: RegExp("\tMax Memory Used: (.*?) MB\t").exec(message)[1],
+        Timestamp: record.timestamp,
+        Message: message
+    };
+}
+
+function parseRegular(record, message) {
+    return {
+        Handler: record.handler,
+        RequestId: RegExp("^(.*?)\t(.*?)\t").exec(message)[2],
+        Timestamp: record.timestamp,
+        Message: message
+    };
+}
+
+
+function safeBuild(out, record) {
+    let result;
+    let message = record.message;
+    if (RegExp("^REPORT").test(message)) {
+        result = parseReport(record, message);
+        out.Timestamp = result.Timestamp;
+        out.Duration = result.Duration;
+        out.Memory = result.Memory;
+    } else {
+        result = parseRegular(record, message);
+    }
+
+    out = safeAdd(out, "Handler", result.Handler);
+    out = safeAdd(out, "RequestId", result.RequestId);
+    return out;
+}
+
+function parseRecord(handler, logEvents){
+    let out = {};
+    for (var i=0; i < logEvents.length; i++) {
+        let log = logEvents[i];
+        log.handler = handler;
+        out = safeBuild(out, log);
+    }
+    return JSON.stringify(out);
+}
+
+function transformLogEvent(data){
+    let handler = data.logGroup.slice(12);
+    return parseRecord(handler, data.logEvents).replace(/\\n/g, "");
 }
 
 
@@ -167,12 +203,12 @@ function putRecordsToKinesisStream(streamName, records, client, resolve, reject,
 function createReingestionRecord(isSas, originalRecord) {
     if (isSas) {
         return {
-            Data: new Buffer(originalRecord.data, 'base64'),
+            Data: Buffer.from(originalRecord.data, 'base64'),
             PartitionKey: originalRecord.kinesisRecordMetadata.partitionKey,
         };
     } else {
         return {
-            Data: new Buffer(originalRecord.data, 'base64'),
+            Data: Buffer.from(originalRecord.data, 'base64'),
         };
     }
 }
@@ -193,7 +229,7 @@ function getReingestionRecord(isSas, reIngestionRecord) {
 
 exports.handler = (event, context, callback) => {
     Promise.all(event.records.map(r => {
-        const buffer = new Buffer(r.data, 'base64');
+        const buffer = Buffer.from(r.data, 'base64');
         const decompressed = zlib.gunzipSync(buffer);
         const data = JSON.parse(decompressed);
         // CONTROL_MESSAGE are sent by CWL to check if the subscription is reachable.
@@ -204,17 +240,13 @@ exports.handler = (event, context, callback) => {
                 result: 'Dropped',
             });
         } else if (data.messageType === 'DATA_MESSAGE') {
-            const promises = data.logEvents.map(transformLogEvent(data.logGroup));
-            return Promise.all(promises)
-                .then(transformed => {
-                    const payload = transformed.reduce((a, v) => a + v, '');
-                    const encoded = new Buffer(payload).toString('base64');
-                    return {
-                        recordId: r.recordId,
-                        result: 'Ok',
-                        data: encoded,
-                    };
-                });
+            let payload = transformLogEvent(data);
+            let encoded = Buffer.from(payload).toString("base64");
+            return {
+                recordId: r.recordId,
+                result: 'Ok',
+                data: encoded,
+            };
         } else {
             return Promise.resolve({
                 recordId: r.recordId,

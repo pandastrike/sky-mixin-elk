@@ -208,7 +208,7 @@ Firehose:
       IndexName: logs
       IndexRotationPeriod: OneWeek
       RetryOptions:
-        DurationInSeconds: 7200
+        DurationInSeconds: 0
       RoleARN:
         "Fn::GetAtt": [FirehoseRole, Arn]
       ProcessingConfiguration:

@@ -37,7 +37,6 @@ process = (SDK, config) ->
   # Kinesis firehose configuration
   stream = {
     name: config.environmentVariables.fullName + "-elk"
-    bucket: "#{config.environmentVariables.fullName}-elk-firehose-backup"
     lambda:
       bucket: config.environmentVariables.skyBucket
       key: "mixin-code/elk/package.zip"
@@ -46,10 +45,6 @@ process = (SDK, config) ->
 
   stream.lambda.arn = "arn:aws:lambda:#{config.aws.region}:#{config.accountID}:function:#{stream.lambda.name}"
 
-  # Check if we need to make a bucket for the stream's failure dumps.
-  if !(await s3.bucketExists stream.bucket)
-    stream.newBucket = true
-
   # Upload the processing lambda to the main orchestration bucket
   await s3.bucketTouch stream.lambda.bucket
   await s3.put stream.lambda.bucket, stream.lambda.key, (resolve __dirname, "..", "..", "..", "files", "package.zip"), false
@@ -57,19 +52,19 @@ process = (SDK, config) ->
 
   # Go through the lambdas producing log outputs and prepare their log names for the subscription filters.
   logs = []
-  cloudfrontFormat = (str) ->
+  cloudformationFormat = (str) ->
     str = str[config.environmentVariables.fullName.length...]
     capitalize camelCase plainText str
   if config.resources
     for resource in values config.resources
       for method in values resource.methods
         log = name: "/aws/lambda/#{method.lambda.function.name}"
-        log.templateName = cloudfrontFormat method.lambda.function.name
+        log.templateName = cloudformationFormat method.lambda.function.name
         logs.push log
   else if config.environment?.simulations
     for simulation in values config.environment.simulations
       log = name: "/aws/lambda/#{simulation.lambda.function.name}"
-      log.templateName = cloudfrontFormat method.lambda.function.name
+      log.templateName = cloudformationFormat method.lambda.function.name
       logs.push log
   else
     throw new Error "Unable to find Sky resources or Stardust simulations to name lambda log groups."

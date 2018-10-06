@@ -36,15 +36,13 @@ ESCluster:
 
 
 {{#with stream}}
-{{#if newBucket}}
-FirehoseBackupBucket:
-  Type: "AWS::S3::Bucket"
-  DeletionPolicy: Retain
+KinesisLambdaLogs:
+  Type: AWS::Logs::LogGroup
   Properties:
-    BucketName: {{bucket}}
-{{/if}}
+    LogGroupName: "/aws/lambda/{{lambda.name}}"
+    RetentionInDays: 30
 
-FirehoseLambdaRole:
+KinesisLambdaRole:
   Type: "AWS::IAM::Role"
   Properties:
     AssumeRolePolicyDocument:
@@ -69,7 +67,6 @@ FirehoseLambdaRole:
               ]
               Resource: arn:aws:logs:*:*:log-group:/aws/lambda/{{lambda.name}}:*
 
-
 FirehoseLambda:
   DependsOn:
     - FirehoseLambdaRole
@@ -79,7 +76,7 @@ FirehoseLambda:
     Handler: "files/index.handler"
     Role:
       "Fn::GetAtt": [FirehoseLambdaRole, Arn]
-    Runtime: nodejs6.10
+    Runtime: nodejs8.10
     Timeout: 120
     Code:
       S3Bucket: {{lambda.bucket}}
@@ -161,27 +158,11 @@ FirehoseRole:
                 "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/index-name*/_stats"
               ]
 
-FirehoseErrorLogs:
-  Type: AWS::Logs::LogGroup
-  Properties:
-    LogGroupName: "/aws/firehose/{{name}}"
-    RetentionInDays: 30
 
-FirehoseElasticsearchStream:
-  DependsOn:
-    - FirehoseErrorLogs
-  Type: AWS::Logs::LogStream
-  Properties:
-    LogGroupName: "/aws/firehose/{{name}}"
-    LogStreamName: elasticsearchDelivery
 
-FirehoseS3Stream:
-  DependsOn:
-    - FirehoseErrorLogs
-  Type: AWS::Logs::LogStream
-  Properties:
-    LogGroupName: "/aws/firehose/{{name}}"
-    LogStreamName: s3backup
+
+
+
 
 Firehose:
   DependsOn:

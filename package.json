@@ -9,7 +9,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "gulp npm:test"
+    "build": "coffee --transpile -o files/index.js src/transform/index.coffee; zip -qr -9 files/package.zip files/index.js"
   },
   "repository": {
     "type": "git",
@@ -44,6 +44,7 @@
     "@babel/preset-env": "^7.1.0",
     "amen": "^2.1.0",
     "babel-core": "^6.26.3",
+    "babel-preset-env": "^1.7.0",
     "coffeescript": "^2.3.2",
     "gulp": "github:gulpjs/gulp#4.0",
     "panda-builder": "2.3.3"

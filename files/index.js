@@ -13,13 +13,9 @@ var _url = require("url");
 
 var _url2 = _interopRequireDefault(_url);
 
-var _zilb = require("zilb");
+var _zlib = require("zlib");
 
-var _zilb2 = _interopRequireDefault(_zilb);
-
-var _crypto = require("crypto");
-
-var _crypto2 = _interopRequireDefault(_crypto);
+var _zlib2 = _interopRequireDefault(_zlib);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -30,14 +26,13 @@ Adapted from the "LogsToElasticsearch" Node 4.3 code produced by the Console dur
 */
 var buildDoc, buildRequest, handler, merge, parseRegular, parseReport, parseResponse, post, transform, unzip;
 
-//var endpoint = 'search-dashkite-david-logs-zpbwhl7k443m74mqubalmxtx2u.us-east-1.es.amazonaws.com';
 merge = function (...objects) {
   return Object.assign({}, ...objects);
 };
 
 unzip = function (input) {
   return new Promise(function (resolve, reject) {
-    return _zilb2.default.gunzip(input, function (error, buffer) {
+    return _zlib2.default.gunzip(input, function (error, buffer) {
       if (error) {
         return reject(error);
       } else {
@@ -55,7 +50,7 @@ parseReport = function (message) {
   };
 };
 
-parseRegular = function (record, message) {
+parseRegular = function (message) {
   return {
     requestId: RegExp("^(.*?)\t(.*?)\t").exec(message)[2]
   };
@@ -70,8 +65,7 @@ buildDoc = function (handler, {
   doc = {
     id,
     handler,
-    timestamp,
-    message
+    timestamp
   };
 
   if (RegExp("^REPORT").test(message)) {
@@ -87,7 +81,7 @@ transform = function (payload) {
   handler = payload.logGroup.slice(12);
   payload.logEvents.forEach(function (logEvent) {
     var action, doc;
-    doc = buildDocument(handler, logEvent);
+    doc = buildDoc(handler, logEvent);
     action = {
       index: {
         _index: process.env.indexName,
@@ -101,19 +95,19 @@ transform = function (payload) {
 };
 
 buildRequest = function (body) {
-  var headers, options;
-  options = _url2.default.parse(process.env.endpoint);
+  var headers;
   headers = {
     "Content-Type": "application/json",
-    "Host": options.host,
+    "Host": process.env.endpoint,
     "Content-Length": Buffer.byteLength(body)
   };
-  return merge(options, {
+  return {
+    hostname: process.env.endpoint,
     method: "POST",
-    path: "_bulk",
+    path: "/_bulk",
     body,
     headers
-  });
+  };
 };
 
 post = function (body) {
@@ -129,6 +123,10 @@ post = function (body) {
       return response.on('end', function () {
         var error, failedItems, info, success;
         info = JSON.parse(responseBody);
+
+        if (Object.keys(info).length === 1 && info.Message) {
+          throw new Error(info.Message);
+        }
 
         if (response.statusCode >= 200 && response.statusCode < 299) {
           failedItems = info.items.filter(function (x) {
@@ -183,25 +181,41 @@ parseResponse = function (callback, {
   }
 };
 
-exports.handler = handler = async function (input, context, callback) {
-  var awslogsData, buffer, e, esBulkBody, response, zippedInput;
+exports.handler = handler = async function ({
+  Records
+}, context, callback) {
+  var awsLogsData, buffer, documents, e, esBulkBody, r, response, zippedInput;
 
   try {
-    // decode input from base64
-    zippedInput = Buffer.from(input.awslogs.data, "base64"); // decompress the input
+    documents = await async function () {
+      var i, len, results;
+      results = [];
 
-    buffer = await unzip(zippedInput); // parse the input from JSON
+      for (i = 0, len = Records.length; i < len; i++) {
+        r = Records[i]; // decode input from base64
 
-    awslogsData = JSON.parse(buffer.toString()); // skip control messages
+        zippedInput = Buffer.from(r.kinesis.data, "base64"); // decompress the input
 
-    if (awsLogsData.messageType === 'CONTROL_MESSAGE') {
-      console.log("Received a control message.");
-      callback(null, "Control messaged handled successfully");
-      return;
-    } // transform the input to Elasticsearch documents
+        buffer = await unzip(zippedInput); // parse the input from JSON
 
+        awsLogsData = JSON.parse(buffer.toString()); // skip control messages
 
-    esBulkBody = transform(awslogsData); // post documents to the Amazon Elasticsearch Service
+        if (awsLogsData.messageType === 'CONTROL_MESSAGE') {
+          console.log("Received a control message.");
+          continue;
+        } else {
+          results.push(transform(awsLogsData));
+        }
+      }
+
+      return results;
+    }(); // transform the input to Elasticsearch documents
+
+    if (documents.length === 0) {
+      return callback(null, "Successfully handled control message.");
+    }
+
+    esBulkBody = documents.join(""); // post documents to the Amazon Elasticsearch Service
 
     response = await post(esBulkBody);
     return parseResponse(callback, response);

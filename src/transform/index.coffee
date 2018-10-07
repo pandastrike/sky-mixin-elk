@@ -3,10 +3,7 @@ Adapted from the "LogsToElasticsearch" Node 4.3 code produced by the Console dur
 ###
 import https from "https"
 import URL from "url"
-import zlib from "zilb"
-import crypto from "crypto"
-
-#var endpoint = 'search-dashkite-david-logs-zpbwhl7k443m74mqubalmxtx2u.us-east-1.es.amazonaws.com';
+import zlib from "zlib"
 
 merge = (objects...) -> Object.assign {}, objects...
 
@@ -23,22 +20,22 @@ parseReport = (message) ->
   duration: RegExp("\tDuration: (.*?) ms\t").exec(message)[1]
   memory: RegExp("\tMax Memory Used: (.*?) MB\t").exec(message)[1]
 
-parseRegular = (record, message) ->
+parseRegular = (message) ->
   requestId: RegExp("^(.*?)\t(.*?)\t").exec(message)[2]
 
 buildDoc = (handler, {id, timestamp, message}) ->
-  doc = {id, handler, timestamp, message}
+  doc = {id, handler, timestamp}
   if RegExp("^REPORT").test message
     merge doc, (parseReport message)
   else
-    merge doc, parseRegular message
+    merge doc, (parseRegular message)
 
 transform = (payload) ->
   bulkRequestBody = ""
   handler = payload.logGroup.slice 12
 
   payload.logEvents.forEach (logEvent) ->
-    doc = buildDocument handler, logEvent
+    doc = buildDoc handler, logEvent
     action =
       index:
         _index: process.env.indexName
@@ -53,13 +50,12 @@ transform = (payload) ->
   bulkRequestBody
 
 buildRequest = (body) ->
-  options = URL.parse process.env.endpoint
   headers =
     "Content-Type": "application/json"
-    "Host": options.host
+    "Host": process.env.endpoint
     "Content-Length": Buffer.byteLength body
 
-  merge options, {method: "POST", path:"_bulk", body, headers}
+  {hostname: process.env.endpoint, method: "POST", path:"/_bulk", body, headers}
 
 post = (body) ->
   responseBody = ""
@@ -70,6 +66,8 @@ post = (body) ->
       response.on 'data', (chunk) -> responseBody += chunk
       response.on 'end', ->
         info = JSON.parse responseBody
+        if Object.keys(info).length == 1 && info.Message
+          throw new Error info.Message
         if response.statusCode >= 200 && response.statusCode < 299
           failedItems = info.items.filter (x) -> x.index.status >= 300
 
@@ -102,29 +100,28 @@ parseResponse = (callback, {error, success, statusCode, failedItems}) ->
     callback null, "Success"
 
 
-handler = (input, context, callback) ->
+handler = ({Records}, context, callback) ->
   try
-    # decode input from base64
-    zippedInput = Buffer.from input.awslogs.data, "base64"
-
-    # decompress the input
-    buffer = await unzip zippedInput
-
-    # parse the input from JSON
-    awslogsData = JSON.parse buffer.toString()
-
-    # skip control messages
-    if awsLogsData.messageType == 'CONTROL_MESSAGE'
+    documents = for r in Records
+      # decode input from base64
+      zippedInput = Buffer.from r.kinesis.data, "base64"
+      # decompress the input
+      buffer = await unzip zippedInput
+      # parse the input from JSON
+      awsLogsData = JSON.parse buffer.toString()
+      # skip control messages
+      if awsLogsData.messageType == 'CONTROL_MESSAGE'
         console.log "Received a control message."
-        callback null, "Control messaged handled successfully"
-        return
+        continue
+      else
+        transform awsLogsData
 
     # transform the input to Elasticsearch documents
-    esBulkBody = transform awslogsData
-
+    if documents.length == 0
+      return callback null, "Successfully handled control message."
+    esBulkBody = documents.join ""
     # post documents to the Amazon Elasticsearch Service
     response = await post esBulkBody
-
     parseResponse callback, response
 
   catch e

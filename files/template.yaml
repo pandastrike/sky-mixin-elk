@@ -36,12 +36,6 @@ ESCluster:
 
 
 {{#with stream}}
-KinesisLambdaLogs:
-  Type: AWS::Logs::LogGroup
-  Properties:
-    LogGroupName: "/aws/lambda/{{lambda.name}}"
-    RetentionInDays: 30
-
 KinesisLambdaRole:
   Type: "AWS::IAM::Role"
   Properties:
@@ -143,8 +137,7 @@ KinesisTrigger:
   Properties:
     BatchSize: 10
     Enabled: true
-    EventSourceArn:
-      "Get:Att": [KinesisStream, Arn]
+    EventSourceArn: "arn:aws:kinesis:{{@root.region}}:{{@root.accountID}}:stream/{{name}}"
     FunctionName: {{lambda.arn}}
     StartingPosition: LATEST
 

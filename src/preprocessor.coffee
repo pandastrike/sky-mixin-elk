@@ -34,13 +34,13 @@ process = (SDK, config) ->
   if !cluster.nodes.highAvailability
     cluster.nodes.highAvailability = false
 
-  # Kinesis firehose configuration
+  # Kinesis stream configuration
   stream = {
     name: config.environmentVariables.fullName + "-elk"
     lambda:
       bucket: config.environmentVariables.skyBucket
       key: "mixin-code/elk/package.zip"
-      name: "#{config.environmentVariables.fullName}-elk-firehose-transform"
+      name: "#{config.environmentVariables.fullName}-elk-transform"
   }
 
   stream.lambda.arn = "arn:aws:lambda:#{config.aws.region}:#{config.accountID}:function:#{stream.lambda.name}"

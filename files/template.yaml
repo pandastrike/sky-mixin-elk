@@ -59,33 +59,48 @@ KinesisLambdaRole:
         PolicyDocument:
           Version: "2012-10-17"
           Statement:
-            - Effect: "Allow"
+            - Effect: Allow
               Action: [
                 "logs:CreateLogGroup",
                 "logs:CreateLogStream",
                 "logs:PutLogEvents",
               ]
               Resource: arn:aws:logs:*:*:log-group:/aws/lambda/{{lambda.name}}:*
+            - Effect: Allow
+              Action: [
+                "kinesis:DescribeStream",
+                "kinesis:GetRecords",
+                "kinesis:GetShardIterator",
+                "kinesis:ListStreams"
+              ]
+              Resource: ["arn:aws:kinesis:{{@root.region}}:{{@root.accountID}}:*"]
 
-FirehoseLambda:
+KinesisLambda:
   DependsOn:
-    - FirehoseLambdaRole
+    - ESCluster
+    - KinesisLambdaRole
   Type: "AWS::Lambda::Function"
   Properties:
     FunctionName: {{lambda.name}}
     Handler: "files/index.handler"
     Role:
-      "Fn::GetAtt": [FirehoseLambdaRole, Arn]
+      "Fn::GetAtt": [KinesisLambdaRole, Arn]
     Runtime: nodejs8.10
     Timeout: 120
+    Environment:
+      Variables:
+        indexName: logs
+        indexType: logs
+        endpoint:
+          "Fn::GetAtt": [ESCluster, DomainEndpoint]
     Code:
       S3Bucket: {{lambda.bucket}}
       S3Key: {{lambda.key}}
 
-FirehoseRole:
+KinesisRole:
   DependsOn:
     - ESCluster
-    - FirehoseLambda
+    - KinesisLambda
   Type: "AWS::IAM::Role"
   Properties:
     AssumeRolePolicyDocument:
@@ -94,7 +109,7 @@ FirehoseRole:
         - Effect: "Allow"
           Principal:
             Service:
-              - firehose.amazonaws.com
+              - kinesis.amazonaws.com
           Action:
             - "sts:AssumeRole"
     Policies:
@@ -108,118 +123,35 @@ FirehoseRole:
                 "lambda:GetFunctionConfiguration"
               ]
               Resource: [{{lambda.arn}}]
-            - Effect: "Allow"
-              Action: [
-                "logs:CreateLogGroup",
-                "logs:CreateLogStream",
-                "logs:PutLogEvents"
-              ]
-              Resource: [
-                "arn:aws:logs:*:*:log-group:/aws/firehose/{{name}}",
-                "arn:aws:logs:*:*:log-group:/aws/firehose/{{name}}:*"
-              ]
-            - Effect: Allow
-              Action: [
-                "s3:AbortMultipartUpload",
-                "s3:GetBucketLocation",
-                "s3:GetObject",
-                "s3:ListBucket",
-                "s3:ListBucketMultipartUploads",
-                "s3:PutObject"
-              ]
-              Resource: [
-                "arn:aws:s3:::{{bucket}}",
-                "arn:aws:s3:::{{bucket}}/*"
-              ]
-            - Effect: Allow
-              Action: [
-                "es:DescribeElasticsearchDomain",
-                "es:DescribeElasticsearchDomains",
-                "es:DescribeElasticsearchDomainConfig",
-                "es:ESHttpPost",
-                "es:ESHttpPut"
-              ]
-              Resource: [
-                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}",
-                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/*"
-              ]
-            - Effect: Allow
-              Action: [
-                "es:ESHttpGet"
-              ]
-              Resource: [
-                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/_all/_settings",
-                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/_cluster/stats",
-                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/index-name*/_mapping/type-name",
-                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/_nodes",
-                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/_nodes/stats",
-                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/_nodes/*/stats",
-                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/_stats",
-                "arn:aws:es:*:{{@root.accountID}}:domain/{{@root.cluster.domain}}/index-name*/_stats"
-              ]
 
-
-
-
-
-
-
-Firehose:
+KinesisStream:
   DependsOn:
     - ESCluster
-    - FirehoseRole
-    - FirehoseLambda
-    - FirehoseElasticsearchStream
-    - FirehoseS3Stream
-  Type: AWS::KinesisFirehose::DeliveryStream
+    - KinesisRole
+    - KinesisLambda
+  Type: AWS::Kinesis::Stream
   Properties:
-    DeliveryStreamName: {{name}}
-    DeliveryStreamType: DirectPut
-    ElasticsearchDestinationConfiguration:
-      # TODO: These are the defaults from the reference docs.  Is this something that should be part of the mixin configuration interface?
-      BufferingHints:
-        IntervalInSeconds: 300
-        SizeInMBs: 5
-      CloudWatchLoggingOptions:
-        Enabled: true
-        LogGroupName: "/aws/firehose/{{name}}"
-        LogStreamName: elasticsearchDelivery
-      DomainARN:
-        "Fn::GetAtt": [ESCluster, DomainArn]
-      IndexName: logs
-      IndexRotationPeriod: OneWeek
-      RetryOptions:
-        DurationInSeconds: 0
-      RoleARN:
-        "Fn::GetAtt": [FirehoseRole, Arn]
-      ProcessingConfiguration:
-        Enabled: true
-        Processors:
-          - Type: Lambda
-            Parameters:
-              - ParameterName: LambdaArn
-                ParameterValue:
-                  "Fn::GetAtt": [FirehoseLambda, Arn]
-      S3BackupMode: FailedDocumentsOnly
-      S3Configuration:
-        BucketARN: "arn:aws:s3:::{{bucket}}"
-        BufferingHints:
-          IntervalInSeconds: 300
-          SizeInMBs: 5
-        CloudWatchLoggingOptions:
-          Enabled: true
-          LogGroupName: "/aws/firehose/{{name}}"
-          LogStreamName: s3backup
-        CompressionFormat: ZIP
-        EncryptionConfiguration:
-          NoEncryptionConfig: NoEncryption
-        RoleARN:
-          "Fn::GetAtt": [FirehoseRole, Arn]
-      TypeName: logs
+    Name: {{name}}
+    RetentionPeriodHours: 24
+    ShardCount: 5
+
+KinesisTrigger:
+  DependsOn:
+    - KinesisLambda
+    - KinesisStream
+  Type: AWS::Lambda::EventSourceMapping
+  Properties:
+    BatchSize: 10
+    Enabled: true
+    EventSourceArn:
+      "Get:Att": [KinesisStream, Arn]
+    FunctionName: {{lambda.arn}}
+    StartingPosition: LATEST
+
 
 LogRole:
   DependsOn:
-    - Firehose
+    - KinesisStream
   Type: "AWS::IAM::Role"
   Properties:
     AssumeRolePolicyDocument:
@@ -237,8 +169,8 @@ LogRole:
           Version: "2012-10-17"
           Statement:
             - Effect: Allow
-              Action: ["firehose:*"]
-              Resource: ["arn:aws:firehose:{{@root.region}}:{{@root.accountID}}:*"]
+              Action: ["kinesis:*"]
+              Resource: ["arn:aws:kinesis:{{@root.region}}:{{@root.accountID}}:*"]
             - Effect: Allow
               Action: ["iam:PassRole"]
               Resource: ["arn:aws:iam::{{@root.accountID}}:role/{{name}}-log-role"]
@@ -249,11 +181,11 @@ LogRole:
 {{#each logs}}
 SubscriptonFilter{{templateName}}:
   DependsOn:
-    - Firehose
+    - KinesisStream
   Type: AWS::Logs::SubscriptionFilter
   Properties:
     DestinationArn:
-      "Fn::GetAtt": [Firehose, Arn]
+      "Fn::GetAtt": [KinesisStream, Arn]
     FilterPattern: "?REPORT ?INFO ?WARN ?ERROR"
     LogGroupName: {{name}}
     RoleArn:

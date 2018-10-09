@@ -24,7 +24,7 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { de
 /*
 Adapted from the "LogsToElasticsearch" Node 4.3 code produced by the Console during manual configurations.  This accepts compressed CloudWatch log data from a subscriber, parses it, and uploads N JSON documents to the Elasticsearch domain in question.
 */
-var buildDoc, buildRequest, handler, merge, parseRegular, parseReport, parseResponse, post, transform, unzip;
+var buildDoc, buildRequest, handler, merge, parseJSON, parseRegular, parseReport, parseResponse, post, transform, unzip;
 
 merge = function (...objects) {
   return Object.assign({}, ...objects);
@@ -50,10 +50,23 @@ parseReport = function (message) {
   };
 };
 
+parseJSON = function (message) {
+  return JSON.parse(RegExp(".*JSON (.*)$").exec(message)[1]);
+};
+
 parseRegular = function (message) {
-  return {
-    requestId: RegExp("^(.*?)\t(.*?)\t").exec(message)[2]
-  };
+  var chunks;
+  chunks = RegExp("^(.*?)\t(.*?)\t").exec(message);
+
+  if ((chunks != null ? chunks.length : void 0) > 1) {
+    return {
+      requestId: RegExp("^(.*?)\t(.*?)\t").exec(message)[2]
+    };
+  } else {
+    return {
+      failure: true
+    };
+  }
 };
 
 buildDoc = function (handler, {
@@ -70,6 +83,8 @@ buildDoc = function (handler, {
 
   if (RegExp("^REPORT").test(message)) {
     return merge(doc, parseReport(message));
+  } else if (RegExp("^JSON").test(message)) {
+    return merge(doc, parseJSON(message));
   } else {
     return merge(doc, parseRegular(message));
   }

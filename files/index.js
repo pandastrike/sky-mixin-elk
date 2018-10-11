@@ -48,10 +48,11 @@ parseReport = function (message) {
     duration: RegExp("\tDuration: (.*?) ms\t").exec(message)[1],
     memory: RegExp("\tMax Memory Used: (.*?) MB\t").exec(message)[1]
   };
-};
+}; // TODO: Make this less fragile...
+
 
 parseJSON = function (message) {
-  return JSON.parse(RegExp(".*JSON (.*)$").exec(message)[1]);
+  return JSON.parse(RegExp(/^(.*)JSON (\{.*)/).exec(message)[2]);
 };
 
 parseRegular = function (message) {
@@ -83,7 +84,7 @@ buildDoc = function (handler, {
 
   if (RegExp("^REPORT").test(message)) {
     return merge(doc, parseReport(message));
-  } else if (RegExp("^JSON").test(message)) {
+  } else if (RegExp(/^(.*)JSON \{/).test(message)) {
     return merge(doc, parseJSON(message));
   } else {
     return merge(doc, parseRegular(message));

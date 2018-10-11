@@ -179,7 +179,7 @@ SubscriptonFilter{{templateName}}:
   Properties:
     DestinationArn:
       "Fn::GetAtt": [KinesisStream, Arn]
-    FilterPattern: "?REPORT ?INFO ?WARN ?ERROR"
+    FilterPattern: "?REPORT ?INFO ?WARN ?ERROR ?JSON"
     LogGroupName: {{name}}
     RoleArn:
       "Fn::GetAtt": [LogRole, Arn]

@@ -20,8 +20,9 @@ parseReport = (message) ->
   duration: RegExp("\tDuration: (.*?) ms\t").exec(message)[1]
   memory: RegExp("\tMax Memory Used: (.*?) MB\t").exec(message)[1]
 
+# TODO: Make this less fragile...
 parseJSON = (message) ->
-  JSON.parse RegExp(".*JSON (.*)$").exec(message)[1]
+  JSON.parse RegExp(/^(.*)JSON (\{.*)/).exec(message)[2]
 
 parseRegular = (message) ->
   chunks = RegExp("^(.*?)\t(.*?)\t").exec(message)
@@ -34,7 +35,7 @@ buildDoc = (handler, {id, timestamp, message}) ->
   doc = {id, handler, timestamp}
   if RegExp("^REPORT").test message
     merge doc, (parseReport message)
-  else if RegExp("^JSON").test message
+  else if RegExp(/^(.*)JSON \{/).test message
     merge doc, (parseJSON message)
   else
     merge doc, (parseRegular message)

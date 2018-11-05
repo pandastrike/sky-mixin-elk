@@ -16,20 +16,20 @@ process = (SDK, config) ->
   c.tags.push {Key: "subtask", Value: "logging"}
 
   # This mixin only works with a VPC
-  if !config.aws.vpc
-    throw new Error "The Elasticsearch mixin can only be used in environments featuring a VPC."
+  # if !config.aws.vpc
+  #   throw new Error "The Elasticsearch mixin can only be used in environments featuring a VPC."
 
   # Elasticsearch cluster configuration... by default only use one subnet.
   cluster =
     domain: config.environmentVariables.fullName + "-elk"
-    subnets: ['"Fn::Select": [ 0, "Fn::Split": [ ",", {Ref: Subnets} ]]']
-  if c.cluster.nodes?.highAvailability
-    cluster.subnets.push '"Fn::Select": [1, "Fn::Split": [ ",", {Ref: Subnets} ]]'
+  #   subnets: ['"Fn::Select": [ 0, "Fn::Split": [ ",", {Ref: Subnets} ]]']
+  # if c.cluster.nodes?.highAvailability
+  #   cluster.subnets.push '"Fn::Select": [1, "Fn::Split": [ ",", {Ref: Subnets} ]]'
   cluster = merge cluster, c.cluster
   if !cluster.nodes
     cluster.nodes =
       count: 1
-      type: "t2.small.elasticsearch"
+      type: "t2.medium.elasticsearch"
       highAvailability: false
   if !cluster.nodes.highAvailability
     cluster.nodes.highAvailability = false
@@ -38,7 +38,7 @@ process = (SDK, config) ->
   stream = {
     name: config.environmentVariables.fullName + "-elk"
     lambda:
-      bucket: config.environmentVariables.skyBucket
+      bucket: config.environmentVariables.skyBucket || config.environmentVariables.starBucket
       key: "mixin-code/elk/package.zip"
       name: "#{config.environmentVariables.fullName}-elk-transform"
   }
@@ -64,7 +64,7 @@ process = (SDK, config) ->
   else if config.environment?.simulations
     for simulation in values config.environment.simulations
       log = name: "/aws/lambda/#{simulation.lambda.function.name}"
-      log.templateName = cloudformationFormat method.lambda.function.name
+      log.templateName = cloudformationFormat simulation.lambda.function.name
       logs.push log
   else
     throw new Error "Unable to find Sky resources or Stardust simulations to name lambda log groups."

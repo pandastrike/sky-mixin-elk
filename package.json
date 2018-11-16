@@ -1,6 +1,6 @@
 {
   "name": "sky-mixin-elk",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Panda Sky Mixin for Allocating an Elasticsearch Cluster and Log Streaming Analysis",
   "main": "build/npm/src/index.js",
   "files": [
@@ -54,6 +54,6 @@
     "panda-quill": "^3.1.1",
     "panda-serialize": "^0.2.0",
     "panda-sky-mixin": "0.0.4",
-    "sundog": "^1.0.8"
+    "sundog": "^1.0.9"
   }
 }

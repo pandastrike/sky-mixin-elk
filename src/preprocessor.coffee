@@ -7,6 +7,7 @@ import Sundog from "sundog"
 process = (SDK, config) ->
   sundog = Sundog SDK
   s3 = sundog.AWS.S3()
+  Log = sundog.aws.CloudWatchLogs()
 
   # Start by extracting out the KMS Mixin configuration:
   {env, tags=[]} = config
@@ -58,7 +59,11 @@ process = (SDK, config) ->
   if config.resources
     for resource in values config.resources
       for method in values resource.methods
-        log = name: "/aws/lambda/#{method.lambda.function.name}"
+        name = "/aws/lambda/#{method.lambda.function.name}"
+        if !(await Log.exists name)
+          await Log.create name
+
+        log = {name}
         log.templateName = cloudformationFormat method.lambda.function.name
         logs.push log
   else if config.environment?.simulations

@@ -7,7 +7,7 @@ import Sundog from "sundog"
 process = (SDK, config) ->
   sundog = Sundog SDK
   s3 = sundog.AWS.S3()
-  Log = sundog.aws.CloudWatchLogs()
+  Log = sundog.AWS.CloudWatchLogs()
 
   # Start by extracting out the KMS Mixin configuration:
   {env, tags=[]} = config

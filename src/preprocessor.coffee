@@ -68,7 +68,10 @@ process = (SDK, config) ->
         logs.push log
   else if config.environment?.lambdas
     for lambda in values config.environment.lambdas
-      log = name: "/aws/lambda/#{lambda.function.name}"
+      name = "/aws/lambda/#{lambda.function.name}"
+      if !(await Log.exists name)
+        await Log.create name
+      log = {name}
       log.templateName = cloudformationFormat lambda.function.name
       logs.push log
   else

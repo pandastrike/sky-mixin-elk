@@ -66,13 +66,13 @@ process = (SDK, config) ->
         log = {name}
         log.templateName = cloudformationFormat method.lambda.function.name
         logs.push log
-  else if config.environment?.simulations
-    for simulation in values config.environment.simulations
-      log = name: "/aws/lambda/#{simulation.lambda.function.name}"
-      log.templateName = cloudformationFormat simulation.lambda.function.name
+  else if config.environment?.lambdas
+    for lambda in values config.environment.lambdas
+      log = name: "/aws/lambda/#{lambda.function.name}"
+      log.templateName = cloudformationFormat lambda.function.name
       logs.push log
   else
-    throw new Error "Unable to find Sky resources or Stardust simulations to name lambda log groups."
+    throw new Error "Unable to find Sky resources or Stardust tasks to name lambda log groups."
 
   {
     cluster
